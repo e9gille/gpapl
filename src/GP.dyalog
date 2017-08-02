@@ -1,9 +1,9 @@
 ﻿:Namespace GP
 
       DefineFns←{
-          fns←'⊢⊣+-×÷⊆⊂≠↓↑'
-          ops←'¨⍨'
-          ,fns∘.,8 1 1/(⊂''),ops
+          fns←'⊢⊣+-×÷⊆⊂⊃∩∪⊥⊤|↓↑≡≢⍳⍸?∊⍷~↓○*⌈⌊<≤=≠≥>⍟∨⍱∧⍲!⍒⍋,⍪⍴⌽⊖⍉'
+          ops←'¨⍨/⌿\⍀'
+          ,fns∘.,(⊂''),ops
       }
 
       GeneratePopulation←{
@@ -21,8 +21,8 @@
           fn←PickOne ⍵
           n←?10
           d←⍺+1
-          n>6:⍉⍪⍺ fn 1              ⍝ leaf node (8/10)
-          n>3:⍺ fn 0⍪(d ∇ ⍵)        ⍝ atop      (1/10)
+          n>2:⍉⍪⍺ fn 1              ⍝ leaf node (8/10)
+          n=2:⍺ fn 0⍪(d ∇ ⍵)        ⍝ atop      (1/10)
           ⍺ fn 1⍪(d ∇ ⍵)⍪(d ∇ ⍵)    ⍝ train     (1/10)
       }
 
@@ -31,7 +31,6 @@
         ⍝ ← ←→ train def
           d g t←1⌷⍵
           1=≢⍵:g            ⍝ leaf node
-⍝          0=t:g,∇ 1↓⍵       ⍝ atop
           s←((d+1)=⊣/⍵)⊂[1]⍵
           (1=≢s)∧1=≢⊃s:g,∇ 1↓⍵
           1=≢s:g,'(',(∇ 1↓⍵),')'
@@ -55,37 +54,45 @@
 
       TestSum←{
           f←⍎⍵
-          0::1
+          0::0
           res←0 0 1 1 f¨0 1 0 1
-          ~∧/scalar←0=≡¨res:1
-          mse 0 1 1 2-res
+          ~mdt←3=10|⎕DR res:0
+          ~∧/scalar←0=≡¨res:0
+          ⌊100×1-mse 0 1 1 2-res
       }
 
       TestPartition←{
           f←⍎⍵
-          0::1
-          'ab' 'cd'≢','f'ab,cd'
+          0::0
+          100×'ab' 'cd'≡','f'ab,cd'
       }
 
       TestDTB←{
           f←⍎⍵
-          0::1
-          'ab cd'≢f'ab cd    '
+          0::0
+          r←' 'f'ab bar    '
+          'ab bar'≡r:100
+          ~mdt←0=10|⎕DR r:0
+          rk←(,1)≡⍴⍴r
+          tnl←∧/'ab' 'bar'(1∊⍷)¨⊂r
+          30(+/×)mdt rk tnl
       }
 
       Run←{
         ⍝ ⍺⍺ ←→ fitness test
         ⍝ ⍵  ←→ function blocks (matrix)
         ⍝ ←  ←→ solution
-          pop0←⍵ GeneratePopulation 1000
+          pop0←⍵ GeneratePopulation 2000
           ft←⍺⍺
-          max←1000
+          max←100
           cnt←0
           ⍵{
               cnt+←1
-              max=⎕←cnt:'No result found in',max,'generations'
               fit←ft Fitness ⍵
-              ∨/m←0=fit:PickShortest RenderGenom¨m/⍵
+              max=⎕←cnt:(⍵/⍨(⌈/=⊢)fit){
+                 ↑⍵(PickShortest RenderGenom¨⍺)
+              }'No result found in',max,'generations. Best solution:'
+              ∨/m←100=fit:PickShortest RenderGenom¨m/⍵
               ⍺ ∇ ⍺(fit NextGeneration)⍵
           }pop0
       }
@@ -94,7 +101,7 @@
           s←≢p←⍵
           fit←⍺⍺
           ⍺{
-              new←⍺∘Mutate¨CrossOver Select p
+              new←⍺∘Mutate¨CrossOver fit Select p
               ⍵,new
           }⍣{s=≢⍺}''
       }
@@ -122,7 +129,8 @@
       }
 
       Select←{
-          (⊂2?≢⍵)⌷⍵
+          f←(⊂i←10?≢⍺)⌷⍺
+          (⊂(⊂2↑⍒f)⌷i)⌷⍵
       }
 
     Fitness←{⍺⍺¨RenderGenom¨⍵}
