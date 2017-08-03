@@ -3,7 +3,7 @@
       DefineFns←{
           fns←'⊢⊣+-×÷⊆⊂⊃∩∪⊥⊤|↓↑≡≢⍳⍸?∊⍷~↓○*⌈⌊<≤=≠≥>⍟∨⍱∧⍲!⍒⍋,⍪⍴⌽⊖⍉'
           ops←'¨⍨/⌿\⍀'
-          ,fns∘.,(⊂''),ops
+          ,fns∘.,(8/⊂''),ops
       }
 
       GeneratePopulation←{
@@ -21,9 +21,9 @@
           fn←PickOne ⍵
           n←?10
           d←⍺+1
-          n>2:⍉⍪⍺ fn 1              ⍝ leaf node (8/10)
-          n=2:⍺ fn 0⍪(d ∇ ⍵)        ⍝ atop      (1/10)
-          ⍺ fn 1⍪(d ∇ ⍵)⍪(d ∇ ⍵)    ⍝ train     (1/10)
+          n>3:⍉⍪⍺ fn 1              ⍝ leaf node (7/10)
+          n=1:⍺ fn 0⍪(d ∇ ⍵)        ⍝ atop      (1/10)
+          ⍺ fn 1⍪(d ∇ ⍵)⍪(d ∇ ⍵)    ⍝ train     (2/10)
       }
 
       RenderGenom←{
@@ -53,8 +53,8 @@
       }
 
       TestSum←{
-          f←⍎⍵
           0::0
+          f←⍎⍵
           res←0 0 1 1 f¨0 1 0 1
           ~mdt←3=10|⎕DR res:0
           ~∧/scalar←0=≡¨res:0
@@ -62,9 +62,22 @@
       }
 
       TestPartition←{
+          0::1
+          f←⍎⍵
+          r←','f'ab,bar'
+          'ab' 'bar'≡r:100
+          ~dt←0=10|⎕DR↑r:1
+          shp←(,2)≡⍴r
+          rk←(,1)≡⍴⍴r
+          dpth←2=≡r
+          tnl←∧/'ab' 'bar'∊r
+          20 15 15 15 20(+/×)dt rk dpth shp tnl
+      }
+
+      TestPartitionWE←{
           f←⍎⍵
           0::0
-          100×'ab' 'cd'≡','f'ab,cd'
+          100×'ab' '' 'cd' ''≡','f'ab,,cd,'
       }
 
       TestDTB←{
@@ -84,22 +97,25 @@
         ⍝ ←  ←→ solution
           pop0←⍵ GeneratePopulation 2000
           ft←⍺⍺
-          max←100
+          max←1000
           cnt←0
           ⍵{
               cnt+←1
               fit←ft Fitness ⍵
-              max=⎕←cnt:(⍵/⍨(⌈/=⊢)fit){
-                 ↑⍵(PickShortest RenderGenom¨⍺)
-              }'No result found in',max,'generations. Best solution:'
-              ∨/m←100=fit:PickShortest RenderGenom¨m/⍵
+              best_genoms←⍵/⍨fit=best_fit←⌈/fit
+              best_solution←RenderGenom PickShortest best_genoms
+              ⎕←cnt best_fit best_solution
+              100=best_fit:best_solution
+              max=cnt:best_solution{
+                  ↑⍵ ⍺
+              }'No result found in',max,'generations. Best fit: ',⌈/fit
               ⍺ ∇ ⍺(fit NextGeneration)⍵
           }pop0
       }
 
       NextGeneration←{
-          s←≢p←⍵
-          fit←⍺⍺
+          s←≢⍵
+          p fit←(40>≢¨⍵)∘/¨⍵ ⍺⍺
           ⍺{
               new←⍺∘Mutate¨CrossOver fit Select p
               ⍵,new
@@ -109,11 +125,15 @@
       Mutate←{
           ⍺{
               (⊂PickOne ⍺)@(⊂2,⍨?≢⍵)⊢⍵
-          }⍣(1=?100)⊢⍵
+          }⍣(50≥?100)⊢⍵
       }
 
       CrossOver←{
           i1 i2←?≢¨p1 p2←⍵
+⍝          d1 d2←⊣/¨p1 p2←⍵
+⍝          ~∨/cmn←(0<d1)∧d1∊d2:⍵
+⍝          i1←PickOne⍸cmn
+⍝          i2←PickOne⍸d2∊i1⊃d1
           (f1 m1 l1)(f2 m2 l2)←i1 i2 SplitByNode¨p1 p2
           d1 d2←⊃¨m1 m2
           m1[;1]+←d2-d1
@@ -129,8 +149,9 @@
       }
 
       Select←{
-          f←(⊂i←10?≢⍺)⌷⍺
-          (⊂(⊂2↑⍒f)⌷i)⌷⍵
+          f←(⊂i←100?≢⍺)⌷⍺
+          p←⊂{⊃¨⍸¨⍵∘≥¨2?⊃⌽⍵}+\f
+          (⊂p⌷i)⌷⍵
       }
 
     Fitness←{⍺⍺¨RenderGenom¨⍵}
