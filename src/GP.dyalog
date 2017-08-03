@@ -1,35 +1,50 @@
 ﻿:Namespace GP
+    ⍝ Chromosome ←→ matrix defining the function train for a solution
+    ⍝               [;1] ←→ depth, [;2] ←→ function
 
-      DefineFns←{
-          fns←'⊢⊣+-×÷⊆⊂⊃∩∪⊥⊤|↓↑≡≢⍳⍸?∊⍷~↓○*⌈⌊<≤=≠≥>⍟∨⍱∧⍲!⍒⍋,⍪⍴⌽⊖⍉'
+      ⍝ GLOBALS
+    :Namespace SELECT
+        TOURNAMENT←0
+        PROBABILISTIC←1
+    :EndNamespace
+    :Namespace MUTATE
+        NODE←0
+        BRANCH←1
+    :EndNamespace
+    MUTATION_RATE←50    ⍝ percent probability of mutation
+    MUTATION_TYPE←MUTATE.NODE
+    SELECT_TYPE←SELECT.TOURNAMENT
+
+      DefineFunctionSpace←{
+          fns←'+-×÷*⍟⌹○!?|⌈⌊⊥⊤⊣⊢=≠≤<>≥≡≢∨∧⍲⍱↑↓⊂⊃⊆⌷⍋⍒⍳⍸∊⍷∪∩~/\⌿⍀,⍪⍴⌽⊖⍉'
           ops←'¨⍨/⌿\⍀'
           ,fns∘.,(8/⊂''),ops
       }
 
       GeneratePopulation←{
-        ⍝ ⍺ ←→ functions
+        ⍝ ⍺ ←→ function space (vector)
         ⍝ ⍵ ←→ population size
-        ⍝ ← ←→ dna population
+        ⍝ ← ←→ population (vector of chromosomes)
           s←⍵
-          ⍺{⍵(∪,)⊂0 RandomGenom ⍺}⍣{s=≢⍺}''
+          ⍺{⍵(∪,)⊂⍺ RandomChromo 0}⍣{s=≢⍺}''
       }
 
-      RandomGenom←{
-        ⍝ ⍺ ←→ depth
-        ⍝ ⍵ ←→ functions
-        ⍝ ← ←→ dna
-          fn←PickOne ⍵
-          n←?10
-          d←⍺+1
-          n>3:⍉⍪⍺ fn 1              ⍝ leaf node (7/10)
-          n=1:⍺ fn 0⍪(d ∇ ⍵)        ⍝ atop      (1/10)
-          ⍺ fn 1⍪(d ∇ ⍵)⍪(d ∇ ⍵)    ⍝ train     (2/10)
+      RandomChromo←{
+        ⍝ ⍵ ←→ depth
+        ⍝ ⍺ ←→ function space
+        ⍝ ← ←→ chromosome
+          fn←PickOne ⍺
+          n←?100
+          d←⍵+1
+          n≤60+d*2:⍉⍪⍵ fn       ⍝ leaf node
+          n>95:⍵ fn⍪(⍺ ∇ d)     ⍝ atop
+          ⍵ fn⍪(⍺ ∇ d)⍪(⍺ ∇ d)  ⍝ train
       }
 
-      RenderGenom←{
+      RenderChromo←{
         ⍝ ⍵ ←→ genom
         ⍝ ← ←→ train def
-          d g t←1⌷⍵
+          d g←1⌷⍵
           1=≢⍵:g            ⍝ leaf node
           s←((d+1)=⊣/⍵)⊂[1]⍵
           (1=≢s)∧1=≢⊃s:g,∇ 1↓⍵
@@ -42,15 +57,108 @@
     PickOne←(?≢)⊃⊢
     PickShortest←(≢¨⍳(⌊/≢¨))⊃⊢
 
-      FitnessTest←{
-        ⍝ ⍵  ←→ candidate functions
-        ⍝ ⍺⍺  ←→ test function
-        ⍝ ← ←→ fitness rating (0 is match)
-          res←⍺⍺¨fns←RenderGenom¨⍵
-          m←res=0
-          ∨/m:PickShortest m/fns
-          ∘∘∘
+      Run←{
+        ⍝ ⍺⍺ ←→ fitness test
+        ⍝ ⍺  ←→ function space
+        ⍝ ⍵  ←→ max generations
+        ⍝ ←  ←→ solution
+          pop0←⍺ GeneratePopulation 1000
+          ft←⍺⍺
+          max←⍵
+          cnt←0
+          ⍺{
+              cnt+←1
+              fit←ft Fitness ⍵
+              best_genoms←⍵/⍨fit=best_fit←⌈/fit
+              best_solution←RenderChromo PickShortest best_genoms
+              ⎕←cnt best_fit best_solution
+              100=best_fit:best_solution
+              max=cnt:best_solution{
+                  ↑⍵ ⍺
+              }'No result found in',max,'generations. Best fit: ',⌈/fit
+              ⍺ ∇ ⍺ NextGeneration ⍵ fit
+          }pop0
       }
+
+      NextGeneration←{
+        ⍝ ⍵ ←→ (population)(fitness values)
+        ⍝ ⍺ ←→ function space
+          s←≢⊃p fit←⍵
+          ⍺{
+              new←⍺∘Mutate¨CrossOverLevel fit Select p
+              ⍵,new
+          }⍣{s=≢⍺}''
+      }
+
+      Mutate←{
+        ⍝ ⍺ ←→ function space
+        ⍝ ⍵ ←→ chromosome
+          ⍺{
+              MUTATION_TYPE=MUTATE.NODE:⍺ MutateNode ⍵
+              MUTATION_TYPE=MUTATE.BRANCH:⍺ MutateBranch ⍵
+          }⍣(MUTATION_RATE≥?100)⊢⍵
+      }
+
+    MutateNode←{(⊂PickOne ⍺)@(⊂(?≢⍵),2)⊢⍵}
+      MutateBranch←{
+          f m l←(?≢⍵)SplitByNode ⍵
+          d←⊃m
+          n←⍺ RandomChromo d
+          f⍪n⍪l
+      }
+
+    CrossOverAny←{(?≢¨⍵)CrossOver ⍵}
+
+      CrossOverLevel←{
+        ⍝ ⍵ ←→  pair of chromosomes
+          d1 d2←⊣/¨⍵
+          ~∨/cmn←(0<d1)∧d1∊d2:⍵
+          i1←PickOne⍸cmn
+          i2←PickOne⍸d2∊i1⊃d1
+          i1 i2 CrossOver ⍵
+      }
+
+      CrossOver←{
+        ⍝ ⍺ ←→ pair of indexes for cross over
+        ⍝ ⍵ ←→ pair of chromosomes
+          (f1 m1 l1)(f2 m2 l2)←⍺ SplitByNode¨⍵
+          d1 d2←⊃¨m1 m2
+          m1[;1]+←d2-d1
+          m2[;1]+←d1-d2
+          (f1⍪m2⍪l1)(f2⍪m1⍪l2)
+      }
+
+      SplitByNode←{
+          d←⊣/m←¯1⍪⍵⍪¯1
+          i←⍺+1
+          p←1,2</2⌊+\(d≤i⊃d)∧(i≤⍳≢m)
+          1 0 ¯1↓¨p⊂[1]m
+      }
+
+      Select←{
+          SELECT_TYPE=SELECT.TOURNAMENT:⍺ SelectTournament ⍵
+          SELECT_TYPE=SELECT.PROBABILISTIC:⍺ SelectProbabilistic ⍵
+      }
+
+      SelectProbabilistic←{
+        ⍝ ⍺ ←→ fitness value
+        ⍝ ⍵ ←→ population
+          ⍵⌷⍨⊂{⊃¨⍸¨⍵∘≥¨2?⊃⌽⍵}+\⍺
+      }
+
+      SelectTournament←{
+        ⍝ ⍺ ←→ fitness value
+        ⍝ ⍵ ←→ population
+          f←(⊂i←(⌊0.1×≢⍺)?≢⍺)⌷⍺
+          (⊂(⊂2↑⍒f)⌷i)⌷⍵
+      }
+
+
+    Fitness←{⍺⍺¨RenderChromo¨⍵}
+
+    mse←+.*∘2÷≢
+
+    :Section SampleTests
 
       TestSum←{
           0::0
@@ -91,71 +199,6 @@
           30(+/×)mdt rk tnl
       }
 
-      Run←{
-        ⍝ ⍺⍺ ←→ fitness test
-        ⍝ ⍵  ←→ function blocks (matrix)
-        ⍝ ←  ←→ solution
-          pop0←⍵ GeneratePopulation 2000
-          ft←⍺⍺
-          max←1000
-          cnt←0
-          ⍵{
-              cnt+←1
-              fit←ft Fitness ⍵
-              best_genoms←⍵/⍨fit=best_fit←⌈/fit
-              best_solution←RenderGenom PickShortest best_genoms
-              ⎕←cnt best_fit best_solution
-              100=best_fit:best_solution
-              max=cnt:best_solution{
-                  ↑⍵ ⍺
-              }'No result found in',max,'generations. Best fit: ',⌈/fit
-              ⍺ ∇ ⍺(fit NextGeneration)⍵
-          }pop0
-      }
-
-      NextGeneration←{
-          s←≢⍵
-          p fit←(40>≢¨⍵)∘/¨⍵ ⍺⍺
-          ⍺{
-              new←⍺∘Mutate¨CrossOver fit Select p
-              ⍵,new
-          }⍣{s=≢⍺}''
-      }
-
-      Mutate←{
-          ⍺{
-              (⊂PickOne ⍺)@(⊂2,⍨?≢⍵)⊢⍵
-          }⍣(50≥?100)⊢⍵
-      }
-
-      CrossOver←{
-          i1 i2←?≢¨p1 p2←⍵
-⍝          d1 d2←⊣/¨p1 p2←⍵
-⍝          ~∨/cmn←(0<d1)∧d1∊d2:⍵
-⍝          i1←PickOne⍸cmn
-⍝          i2←PickOne⍸d2∊i1⊃d1
-          (f1 m1 l1)(f2 m2 l2)←i1 i2 SplitByNode¨p1 p2
-          d1 d2←⊃¨m1 m2
-          m1[;1]+←d2-d1
-          m2[;1]+←d1-d2
-          (f1⍪m2⍪l1)(f2⍪m1⍪l2)
-      }
-
-      SplitByNode←{
-          d←⊣/m←¯1⍪⍵⍪¯1
-          i←⍺+1
-          p←1,2</2⌊+\(d≤i⊃d)∧(i≤⍳≢m)
-          1 0 ¯1↓¨p⊂[1]m
-      }
-
-      Select←{
-          f←(⊂i←100?≢⍺)⌷⍺
-          p←⊂{⊃¨⍸¨⍵∘≥¨2?⊃⌽⍵}+\f
-          (⊂p⌷i)⌷⍵
-      }
-
-    Fitness←{⍺⍺¨RenderGenom¨⍵}
-
-    mse←+.*∘2÷≢
+    :EndSection ⍝ SampleTests
 
 :EndNamespace
