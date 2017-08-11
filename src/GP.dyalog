@@ -2,61 +2,79 @@
     ⍝ Chromosome ←→ matrix defining the function train for a solution
     ⍝               [;1] ←→ depth, [;2] ←→ function
 
-      ⍝ GLOBALS
+   ⍝ GLOBALS
     ⎕RL←⍬ 2
-    SELECT_TOURNAMENT←0
-    SELECT_PROBABILISTIC←1
-    CROSSOVER_LEVEL←0
-    CROSSOVER_ANY←1
-    MUTATE_NODE←0
-    MUTATE_BRANCH←1
+    SELECT_TOURNAMENT       ←'tournament'
+    SELECT_PROBABILISTIC    ←'probabilistic'
+    CROSSOVER_LEVEL         ←'level'
+    CROSSOVER_ANY           ←'any'
+    MUTATE_NODE             ←'node'
+    MUTATE_BRANCH           ←'branch'
 
       DefaultSettings←{
           s←⎕NS''
           s.CrossOverType←CROSSOVER_LEVEL
-          s.FunctionSpace←DefineFunctionSpace ⍬
+          s.FunctionSet←DefineFunctionSet ⍬
           s.MaxGenerations←1000
           s.MutationRate←1          ⍝ % probability of mutation
           s.MutationType←MUTATE_NODE
           s.PopulationSize←1000
           s.SelectionType←SELECT_TOURNAMENT
+          s.TerminalSet←'?10' '?0'
+          s.TerminateOnFound←1
+          s.TournamentSize←10
           s
       }
 
-      DefineFunctionSpace←{
+      DefineFunctionSet←{
           fns←'+-×÷*⍟⌹○!?|⌈⌊⊥⊤⊣⊢=≠≤<>≥≡≢∨∧⍲⍱↑↓⊂⊃⊆⌷⍋⍒⍳⍸∊⍷∪∩~,⍪⍴⌽⊖⍉'
           ops←'¨⍨/⌿\⍀'
-          spec←('('∘,,∘')')¨,∘.,⍨'/⌿\⍀'
-          spec,,fns∘.,(8/⊂''),ops
+          spec←('('∘,,∘')')¨,'/⌿\⍀'∘.,'/⌿\⍀⍨'
+          '(≢⊢)' '(≢⊣)',spec,,fns∘.,ops,⊂''
       }
 
       GeneratePopulation←{
-        ⍝ ⍺ ←→ function space (vector)
         ⍝ ⍵ ←→ population size
         ⍝ ← ←→ population (vector of chromosomes)
           s←⍵
-          ⍺{⍵(∪,)⊂⍺ RandomChromo 0}⍣{s=≢⍺}''
+          {⍵(∪,)⊂RandomChromo 0}⍣{s=≢⍺}''
       }
 
       Init←{
         ⍝ ⍵ ←→ settings
         ⍝ ⍺ ←→ fitness test function (source)
-          ⎕THIS.FunctionSpace←⍵.FunctionSpace
-          rc←⎕FX ⍺
+          ⎕THIS.FunctionSet←⍵.FunctionSet
+          ⎕THIS.TerminalSet←⍵.TerminalSet
+          rc←#.⎕FX ⍺
+          _←⍎'TargetTest←#.',rc
           ⎕FX GenerateNextGenFn ⍵
+      }
+
+      InitIsolates←{
+          _←{0::0 ⋄ r←#.⎕CY ⍵}⍣(0=⊃#.⎕NC'isolate')⊢'isolate'
+          #.isolate.New¨(#.isolate.Config'processors')⍴⊂''
+      }
+
+      PopulationAndFitness←{
+        ⍝ ⍺⍺ ←→ function to generate population
+        ⍝ ⍵  ←→ parameters for generator
+          pop←⍺⍺ ⍵
+          fit←TargetTest CheckFitness pop
+          pop fit
       }
 
       RandomChromo←{
         ⍝ ⍵ ←→ depth
-        ⍝ ⍺ ←→ function space
         ⍝ ← ←→ chromosome
-          fn←PickOne ⍺
+          fn←PickOne FunctionSet
           n←?100
           d←⍵+1
-          n≤40+d*2:⍉⍪⍵ fn       ⍝ leaf node
-          n>95:⍵ fn⍪(⍺ ∇ d)     ⍝ atop
-          ⍵ fn⍪(⍺ ∇ d)⍪(⍺ ∇ d)  ⍝ train
-      }
+          n≤30+d*2:⍉⍪⍵ fn           ⍝ leaf node (f)
+          n>95:⍵ fn⍪(∇ d)           ⍝ atop      (fg)                  
+          ⍝ A train   (Agh)
+          (0<≢TerminalSet)∧n>90:⍵ fn⍪d(⍕⍎PickOne TerminalSet)⍪(∇ d)    
+          ⍵ fn⍪(∇ d)⍪(∇ d)          ⍝ F train   (fgh)
+      }                       
 
       RenderChromo←{
         ⍝ ⍵ ←→ genom
@@ -78,23 +96,22 @@
         ⍝ ⍺⍺ ←→ fitness test
         ⍝ ⍵  ←→ settings
         ⍝ ←  ←→ solution
+          tt←⍺⍺
           s←DefaultSettings⍣(0∊⍴⍵)⊢⍵
-          ft←⍺⍺
-          rc←(⎕NR'ft')Init s
+          rc←(⎕NR'tt')Init s
           rc≢'NextGeneration':'Failed fixing evolution function, rc: ',rc
           sz←s.PopulationSize
-          pop0←s.FunctionSpace GeneratePopulation sz
-          fit0←ft Fitness pop0
-          max←s.MaxGenerations
-          cnt pop fit←{
-              cnt pop fit←⍵
-              next_pop←FunctionSpace NextGeneration sz pop fit
-              next_fit←ft Fitness next_pop
-              (cnt+1)next_pop next_fit
-          }⍣{(s.MaxGenerations=⊃⍺)∨(100=⌈/3⊃⍺)}0 pop0 fit0
-          best_genoms←pop/⍨fit=best_fit←⌈/fit
-          best_solution←RenderChromo PickShortest best_genoms
-          cnt best_fit best_solution
+          pop0 fit0←GeneratePopulation PopulationAndFitness sz
+          ⎕←hof←⍉⍪'Generation' 'Fitness' 'Solution'
+          s.TerminateOnFound∧100∊fit0:r←hof⊣⎕←RenderResult hof⍪←FindLeader 1 pop0 fit0
+          cnt pop fit hof←{
+              cnt pop fit hof←⍵
+              ⎕←RenderResult hof⍪←FindLeader cnt pop fit
+              next_pop next_fit←NextGeneration PopulationAndFitness sz pop fit
+              (cnt+1)next_pop next_fit hof
+          }⍣{(s.MaxGenerations=⊃⍺)∨s.TerminateOnFound∧100∊3⊃⍺}1 pop0 fit0 hof
+          ⎕←RenderResult hof⍪←FindLeader cnt pop fit
+          1:r←hof
       }
 
       RunII←{
@@ -102,56 +119,73 @@
         ⍝ ⍺  ←→ isolates
         ⍝ ⍵  ←→ settings
         ⍝ ←  ←→ solution
+          tt←⍺⍺
           s←DefaultSettings⍣(0∊⍴⍵)⊢⍵
-          ft←⍺⍺
-          iss←⍺
+          iss←InitIsolates ⍬
           rc←iss.{≢#.⎕FIX ⍵}⊂⎕SRC ⎕THIS
-          rc←(⊂⎕NR'ft')iss.{⍺ #.GP.Init ⍵}s
+          rc←(⊂⎕NR'tt')iss.{⍺ #.GP.Init ⍵}s
           ∨/~rc∊⊂'NextGeneration':'Failed fixing evolution function, rc: ',rc
           sz←⌈s.PopulationSize÷≢iss
-          pop0 fit0←,⌿↑iss.{{⍵ #.GP.(ft Fitness ⍵)}#.GP.FunctionSpace #.GP.GeneratePopulation ⍵}sz
-          cnt pop fit←{
-              cnt pop fit←⍵
-              next_pop next_fit←,⌿↑iss.{{⍵ #.GP.(ft Fitness ⍵)}#.GP.FunctionSpace #.GP.NextGeneration ⍵}⊂sz pop fit
-              (cnt+1)next_pop next_fit
-          }⍣{(s.MaxGenerations=⊃⍺)∨(100=⌈/3⊃⍺)}0 pop0 fit0
+          pop0 fit0←,⌿↑iss.{#.GP.(GeneratePopulation PopulationAndFitness ⍵)}sz
+          ⎕←hof←⍉⍪'Generation' 'Fitness' 'Solution'
+          s.TerminateOnFound∧100∊fit0:r←hof⍪FindLeader 1 pop0 fit0
+          cnt pop fit hof←{
+              cnt pop fit hof←⍵
+              ⎕←RenderResult hof⍪←FindLeader cnt pop fit
+              next_pop next_fit←,⌿↑iss.{#.GP.(NextGeneration PopulationAndFitness ⍵)}⊂sz pop fit
+              i←∪next_pop⍳next_pop
+              (cnt+1)(next_pop[i])(next_fit[i])hof
+          }⍣{(s.MaxGenerations=⊃⍺)∨s.TerminateOnFound∧100∊3⊃⍺}1 pop0 fit0 hof
+          1:r←hof⍪FindLeader cnt pop fit
+      }
+
+      HallOfFame←{
+          cnt fit sol←FindLeader ⍵
+     
+      }
+
+      FindLeader←{
+          cnt pop fit←⍵
           best_genoms←pop/⍨fit=best_fit←⌈/fit
           best_solution←RenderChromo PickShortest best_genoms
           cnt best_fit best_solution
       }
 
+      RenderResult←{
+          cnt fit sol←⍵
+          (,'I11,I9'⎕FMT⍉⍪cnt fit),'  ',sol
+      }
+
       GenerateNextGenFn←{
-          m←(MUTATE_NODE MUTATE_BRANCH⍳⍵.MutationType)⊃'MutateNode' 'MutateBranch'
-          m,←'⍣(',(⍕⍵.MutationRate),'≥?100)'
-          co←(CROSSOVER_LEVEL CROSSOVER_ANY⍳⍵.CrossOverType)⊃'CrossOverLevel' 'CrossOverAny'
-          s←(SELECT_TOURNAMENT SELECT_PROBABILISTIC⍳⍵.SelectionType)⊃'SelectTournament' 'SelectProbabilistic'
+          m←('⍣(',(⍕⍵.MutationRate),'≥?100)'){
+              ⍵≡MUTATE_NODE:'MutateNode',⍺
+              ⍵≡MUTATE_BRANCH:'MutateBranch',⍺
+          }⍵.MutationType
+          co←{
+              ⍵≡CROSSOVER_LEVEL:'CrossOverLevel'
+              ⍵≡CROSSOVER_ANY:'CrossOverAny'
+          }⍵.CrossOverType
+          s←(⍕⍵.TournamentSize){
+              ⍵≡SELECT_TOURNAMENT:⍺,' SelectTournament'
+              ⍵≡SELECT_PROBABILISTIC:'SelectProbabilistic'
+          }⍵.SelectionType
      
           ∆←,⊂'NextGeneration←{'
           ∆,←⊂'  ⍝ ⍵ ←→ (size)(population)(fitness values)'
-          ∆,←⊂'  ⍝ ⍺ ←→ function space'
           ∆,←⊂'    s p f←⍵'
-          ∆,←⊂'    ⍺{'
-          ∆,←⊂'        new←⍺∘',m,'¨',co,' f ',s,' p'
+          ∆,←⊂'    {'
+          ∆,←⊂'        new←',m,'¨',co,' ',s,' p f'
           ∆,←⊂'        ⍵,new'
-          ∆,←⊂'    }⍣{s=≢⍺}⍬'
+          ∆,←⊂'    }⍣{s≤≢⍺}⍬'
           ∆,←⊂,'}'
           ∆
       }
 
-      Mutate←{
-        ⍝ ⍺ ←→ function space
-        ⍝ ⍵ ←→ chromosome
-          ⍺{
-              MUTATION_TYPE=MUTATE.NODE:⍺ MutateNode ⍵
-              MUTATION_TYPE=MUTATE.BRANCH:⍺ MutateBranch ⍵
-          }⍣(MUTATION_RATE≥?100)⊢⍵
-      }
-
-    MutateNode←{(⊂PickOne ⍺)@(⊂(?≢⍵),2)⊢⍵}
+    MutateNode←{(⊂PickOne FunctionSet)@(⊂(?≢⍵),2)⊢⍵}
       MutateBranch←{
           f m l←(?≢⍵)SplitByNode ⍵
           d←⊃m
-          n←⍺ RandomChromo d
+          n←RandomChromo d
           f⍪n⍪l
       }
 
@@ -183,78 +217,24 @@
           1 0 ¯1↓¨p⊂[1]m
       }
 
-      Select←{
-          SELECT_TYPE=SELECT.TOURNAMENT:⍺ SelectTournament ⍵
-          SELECT_TYPE=SELECT.PROBABILISTIC:⍺ SelectProbabilistic ⍵
-      }
-
       SelectProbabilistic←{
-        ⍝ ⍺ ←→ fitness value
-        ⍝ ⍵ ←→ population
+        ⍝ ⍵ ←→ (population)(fitness value)
           ⍵⌷⍨⊂{⊃¨⍸¨⍵∘≥¨2?⊃⌽⍵}+\⍺
       }
 
       SelectTournament←{
-        ⍝ ⍺ ←→ fitness value
-        ⍝ ⍵ ←→ population
-          f←(⊂i←(10⌈⌊0.01×≢⍺)?≢⍺)⌷⍺
-          (⊂(⊂2↑⍒f)⌷i)⌷⍵
+        ⍝ ⍺ ←→ tournament size
+        ⍝ ⍵ ←→ (population)(fitness value)
+          pop fit←⍵
+          f←(⊂i←⍺?≢fit)⌷fit
+          (⊂(⊂2↑⍒f)⌷i)⌷pop
       }
 
 
-    Fitness←{⍺⍺¨RenderChromo¨⍵}
-
-    mse←+.*∘2÷≢
-
-    :Section SampleTests
-
-      TestSum←{
-          0::0
-          f←⍎⍵
-          res←0 0 1 1 f¨0 1 0 1
-          ~mdt←3=10|⎕DR res:0
-          ~∧/scalar←0=≡¨res:0
-          ⌊100×1-mse 0 1 1 2-res
+      CheckFitness←{
+          fns←RenderChromo¨⍵
+          ⍺⍺{0::1 ⋄ ⍺⍺ ⍵}¨fns
       }
 
-      TestPartition←{
-          0::1
-          f←⍎⍵
-          r←','f'ab,bar'
-          'ab' 'bar'≡r:100
-          ~dt←0=10|⎕DR↑r:1
-          shp←(,2)≡⍴r
-          rk←(,1)≡⍴⍴r
-          dpth←2=≡r
-          tnl←∧/'ab' 'bar'∊r
-          20 15 15 15 20(+/×)dt rk dpth shp tnl
-      }
-
-      TestPartitionWE←{
-          0::1
-          f←⍎⍵
-          r←','f'ab,,cd,'
-          ~dt←0=10|⎕DR↑r:1
-          shp←(,2)≡⍴r
-          rk←(,1)≡⍴⍴r
-          dpth←2=≡r
-          t1←'ab' '' 'cd' ''≡r
-          t2←'ab' 'bar,'≡',,'f'ab,,bar,'
-          2 2 2 2 46 46(+/×)dt rk dpth shp t1 t2
-     
-      }
-
-      TestDTB←{
-          f←⍎⍵
-          0::0
-          r←' 'f'ab bar    '
-          'ab bar'≡r:100
-          ~mdt←0=10|⎕DR r:0
-          rk←(,1)≡⍴⍴r
-          tnl←∧/'ab' 'bar'(1∊⍷)¨⊂r
-          30(+/×)mdt rk tnl
-      }
-
-    :EndSection ⍝ SampleTests
 
 :EndNamespace
