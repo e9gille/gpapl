@@ -3,6 +3,7 @@
     PickOne←(?≢)⊃⊢
     
     Split←≠⊆⊢
-
+    
+    UniqueIndexes←⊢⍳∪
 
 :EndNamespace

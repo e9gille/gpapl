@@ -15,11 +15,13 @@
           s←⎕NS''
           s.CrossOverType←CROSSOVER_LEVEL
           s.FunctionSet←DefineFunctionSet ⍬
+          s.LogToSession←1
           s.MaxGenerations←1000
-          s.MutationRate←1          ⍝ % probability of mutation
+          s.MutationRate←.01          ⍝ % probability of mutation
           s.MutationType←MUTATE_NODE
           s.PopulationSize←1000
           s.SelectionType←SELECT_TOURNAMENT
+          s.SurvivalRate←.01
           s.TerminalSet←'?10' '?0'
           s.TerminateOnFound←1
           s.TournamentSize←10
@@ -45,8 +47,8 @@
         ⍝ ⍺ ←→ fitness test function (source)
           ⎕THIS.FunctionSet←⍵.FunctionSet
           ⎕THIS.TerminalSet←⍵.TerminalSet
-          rc←#.⎕FX ⍺
-          _←⍎'TargetTest←#.',rc
+          rc←⍵.⎕FX ⍺
+          _←⍎'TargetTest←⍵.',rc
           ⎕FX GenerateNextGenFn ⍵
       }
 
@@ -67,14 +69,14 @@
         ⍝ ⍵ ←→ depth
         ⍝ ← ←→ chromosome
           fn←PickOne FunctionSet
-          n←?100
+          term atop←3 10(0=|)n←?100
           d←⍵+1
           n≤30+d*2:⍉⍪⍵ fn           ⍝ leaf node (f)
-          n>95:⍵ fn⍪(∇ d)           ⍝ atop      (fg)                  
+          atop:⍵ fn⍪(∇ d)           ⍝ atop      (fg)
           ⍝ A train   (Agh)
-          (0<≢TerminalSet)∧n>90:⍵ fn⍪d(⍕⍎PickOne TerminalSet)⍪(∇ d)    
+          (0<≢TerminalSet)∧term:⍵ fn⍪d(⍕⍎PickOne TerminalSet)⍪(∇ d)
           ⍵ fn⍪(∇ d)⍪(∇ d)          ⍝ F train   (fgh)
-      }                       
+      }
 
       RenderChromo←{
         ⍝ ⍵ ←→ genom
@@ -92,6 +94,23 @@
     PickOne←(?≢)⊃⊢
     PickShortest←(≢¨⍳(⌊/≢¨))⊃⊢
 
+      Log←{
+          ⍺.HallOfFame⍪←l←FindLeader ⍵
+⍝          ⍺.Settings.LogToSession:⍺⊣⎕←RenderResult l
+⍝          ⍺
+          ⍺.Settings.LogToSession=1:⍺⊣⎕←RenderResult l
+          ⍺⊣⍞←(⎕PW⍴⎕UCS 8),RenderResult l
+      }
+
+
+      ResultSpace←{
+          r←⎕NS''
+          r.Settings←r.⎕NS ⍵
+          r.HallOfFame←⍉⍪'Generation' 'Fitness' 'Solution'
+          r.BestSolutions←⍬
+          r
+      }
+
       Run←{
         ⍝ ⍺⍺ ←→ fitness test
         ⍝ ⍵  ←→ settings
@@ -102,16 +121,17 @@
           rc≢'NextGeneration':'Failed fixing evolution function, rc: ',rc
           sz←s.PopulationSize
           pop0 fit0←GeneratePopulation PopulationAndFitness sz
-          ⎕←hof←⍉⍪'Generation' 'Fitness' 'Solution'
-          s.TerminateOnFound∧100∊fit0:r←hof⊣⎕←RenderResult hof⍪←FindLeader 1 pop0 fit0
-          cnt pop fit hof←{
-              cnt pop fit hof←⍵
-              ⎕←RenderResult hof⍪←FindLeader cnt pop fit
+          r←ResultSpace s
+          s.TerminateOnFound∧∨/100≤fit0:Summary r Log 1 pop0 fit0
+          cnt pop fit←r{
+              cnt pop fit←⍵
+              _←⍺ Log cnt pop fit
               next_pop next_fit←NextGeneration PopulationAndFitness sz pop fit
-              (cnt+1)next_pop next_fit hof
-          }⍣{(s.MaxGenerations=⊃⍺)∨s.TerminateOnFound∧100∊3⊃⍺}1 pop0 fit0 hof
-          ⎕←RenderResult hof⍪←FindLeader cnt pop fit
-          1:r←hof
+              i←∪next_pop⍳next_pop
+              (cnt+1)(next_pop[i])(next_fit[i])
+              ⍝(cnt+1)next_pop next_fit
+          }⍣{(s.MaxGenerations=⊃⍺)∨s.TerminateOnFound∧∨/100≤3⊃⍺}1 pop0 fit0
+          Summary r Log cnt pop fit
       }
 
       RunII←{
@@ -127,21 +147,16 @@
           ∨/~rc∊⊂'NextGeneration':'Failed fixing evolution function, rc: ',rc
           sz←⌈s.PopulationSize÷≢iss
           pop0 fit0←,⌿↑iss.{#.GP.(GeneratePopulation PopulationAndFitness ⍵)}sz
-          ⎕←hof←⍉⍪'Generation' 'Fitness' 'Solution'
-          s.TerminateOnFound∧100∊fit0:r←hof⍪FindLeader 1 pop0 fit0
-          cnt pop fit hof←{
-              cnt pop fit hof←⍵
-              ⎕←RenderResult hof⍪←FindLeader cnt pop fit
+          r←ResultSpace s
+          s.TerminateOnFound∧∨/100≤fit0:Summary r Log 1 pop0 fit0
+          cnt pop fit←r{
+              cnt pop fit←⍵
+              _←⍺ Log cnt pop fit
               next_pop next_fit←,⌿↑iss.{#.GP.(NextGeneration PopulationAndFitness ⍵)}⊂sz pop fit
               i←∪next_pop⍳next_pop
-              (cnt+1)(next_pop[i])(next_fit[i])hof
-          }⍣{(s.MaxGenerations=⊃⍺)∨s.TerminateOnFound∧100∊3⊃⍺}1 pop0 fit0 hof
-          1:r←hof⍪FindLeader cnt pop fit
-      }
-
-      HallOfFame←{
-          cnt fit sol←FindLeader ⍵
-     
+              (cnt+1)(next_pop[i])(next_fit[i])
+          }⍣{(s.MaxGenerations=⊃⍺)∨s.TerminateOnFound∧∨/100≤3⊃⍺}1 pop0 fit0
+          Summary r Log cnt pop fit
       }
 
       FindLeader←{
@@ -156,8 +171,16 @@
           (,'I11,I9'⎕FMT⍉⍪cnt fit),'  ',sol
       }
 
+      Summary←{
+          u←(⊢⍳∪)⍵.HallOfFame[;3]
+          b←(⊢=⌈/)1↓⍵.HallOfFame[u;2]
+          s←b\(⊢=⌊/)≢¨b/1↓⍵.HallOfFame[u;3]
+          ⍵.BestSolutions←(1,s)⌿⍵.HallOfFame[u;]
+          ⍵
+      }
+
       GenerateNextGenFn←{
-          m←('⍣(',(⍕⍵.MutationRate),'≥?100)'){
+          m←('⍣(',(⍕⍵.MutationRate),'>?0)'){
               ⍵≡MUTATE_NODE:'MutateNode',⍺
               ⍵≡MUTATE_BRANCH:'MutateBranch',⍺
           }⍵.MutationType
@@ -167,16 +190,19 @@
           }⍵.CrossOverType
           s←(⍕⍵.TournamentSize){
               ⍵≡SELECT_TOURNAMENT:⍺,' SelectTournament'
-              ⍵≡SELECT_PROBABILISTIC:'SelectProbabilistic'
+              ⍵≡SELECT_PROBABILISTIC:' 2 SelectProbabilistic'
           }⍵.SelectionType
+          sr←⍕⍵.SurvivalRate
      
           ∆←,⊂'NextGeneration←{'
           ∆,←⊂'  ⍝ ⍵ ←→ (size)(population)(fitness values)'
           ∆,←⊂'    s p f←⍵'
+          ∆,←⊂'    next←(⌊s×',sr,') SelectProbabilistic p f'
           ∆,←⊂'    {'
           ∆,←⊂'        new←',m,'¨',co,' ',s,' p f'
+          ∆,←⊂'        new/⍨←50>≢¨new'
           ∆,←⊂'        ⍵,new'
-          ∆,←⊂'    }⍣{s≤≢⍺}⍬'
+          ∆,←⊂'    }⍣{s≤≢⍺}next'
           ∆,←⊂,'}'
           ∆
       }
@@ -189,7 +215,7 @@
           f⍪n⍪l
       }
 
-    CrossOverAny←{(?≢¨⍵)CrossOver ⍵}
+    CrossOverAny←{0∊i←1-⍨≢¨⍵:⍵ ⋄ (?i)CrossOver ⍵}
 
       CrossOverLevel←{
         ⍝ ⍵ ←→  pair of chromosomes
@@ -219,14 +245,15 @@
 
       SelectProbabilistic←{
         ⍝ ⍵ ←→ (population)(fitness value)
-          ⍵⌷⍨⊂{⊃¨⍸¨⍵∘≥¨2?⊃⌽⍵}+\⍺
+          p f←⍵
+          p⌷⍨⊂⍺{⊃¨⍸¨⍵∘≥¨⍺?⊃⌽⍵}+\f
       }
 
       SelectTournament←{
         ⍝ ⍺ ←→ tournament size
         ⍝ ⍵ ←→ (population)(fitness value)
           pop fit←⍵
-          f←(⊂i←⍺?≢fit)⌷fit
+          f←(⊂i←⍺(⌊?⊢)≢fit)⌷fit
           (⊂(⊂2↑⍒f)⌷i)⌷pop
       }
 
