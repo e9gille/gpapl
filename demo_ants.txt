@@ -1,0 +1,51 @@
+⍝ Ant Chromosome
+ant←#.AntSimulator.NewAnt ⍬
+⍴¨ant.weights
+⍴¨ant.biases
+
+⍝ GP Chromosome
+settings←GP.DefaultSettings ⍬
+(,⊂'MyFitnessTest←{⍵}') GP.Init settings
+chr1←GP.RandomChromo 0
+
+
+⍝ Create a 10x10 world with 5 food markers and 20 obstacles
+world←.05 .2 #.AntSimulator.World 10
+
+⍝ Configure evolution run
+settings←#.AntSimulator.DefaultSettings ⍬
+settings.MaxGenerations←1000
+settings.MutationRate←.2
+settings.PopulationSize←10
+settings.SimulationSteps←200
+settings.SurvivalRate←.01
+
+⍝ Run the evolution
+res←world #.AntSimulator.Run settings
+
+⍝ Pick ants from HallOfFame (first of every increase in fitness)
+
+inds←1↓∪⍳⍨2⌷[2]res.HallOfFame
+ants←#.AntSimulator.NewAnt¨inds 3⌷res.HallOfFame      
+ants.Name←↓'<Generation:>,I4,< - Fitness:>,I4'⎕FMT inds(1 2)⌷res.HallOfFame
+
+⍝ Run the renderer on each ant
+
+ants #.AntSimulator.Render.Play¨⊂world 100 10
+
+⍝ Here's one I created earlier
+ants10←JSONAPL⊃⎕NGET'P:\APL\gpapl\samples\ants_10.json'
+world10←JSONAPL⊃⎕NGET'P:\APL\gpapl\samples\world_10.json'
+ants10 #.AntSimulator.Render.Play¨⊂world10 200 20
+
+antsfood←JSONAPL⊃⎕NGET'P:\APL\gpapl\samples\ants_10_food.json'
+worldfood←JSONAPL⊃⎕NGET'P:\APL\gpapl\samples\world_10_food.json'
+antsfood #.AntSimulator.Render.Play¨⊂worldfood 200 20
+
+antpro←JSONAPL⊃⎕NGET'P:\APL\gpapl\samples\sample_ant_food.json'
+worldpro←JSONAPL⊃⎕NGET'P:\APL\gpapl\samples\sample_world_food.json'
+antpro #.AntSimulator.Render.Play worldpro 600 20
+
+⍝ Demo of GP
+
+#.SampleTests.FindPoly 1

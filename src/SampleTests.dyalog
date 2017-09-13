@@ -32,7 +32,7 @@
           s.PopulationSize←2000
           s.MaxGenerations←100
           s.FunctionSet←,'+-×⊢⊣'∘.,'⍨' ''
-          s.TerminateOnFound←0
+          s.TerminateOnFound←1
      
           ⍵=1:TestPoly1 #.GP.Run s
           ⍵=2:TestPoly2 #.GP.Run s
